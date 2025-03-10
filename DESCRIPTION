@@ -1,0 +1,18 @@
+Package: StaggR
+Type: Package
+Title: StaggR Optimizes Planning of Staggered Treatement Regimes
+Version: 0.1.0
+Author: Alex Francette
+Maintainer: Alex Francette <amfrancette@gmail.com>
+Description: This function computes the optimal time intervals for processing samples in a staggered fashion, ensuring that overlapping steps are avoided. 
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports:
+	tidyverse,
+	ggplot2,
+	reshape2,
+	lubridate,
+	DT,
+	roxygen
+RoxygenNote: 7.3.2
