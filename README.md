@@ -3,6 +3,8 @@
 [](https://www.r-project.org/)
 [](https://shiny.posit.co/)
 
+Use it now at [](https://alexfrancette.shinyapps.io/staggr/)
+
 **StaggR** is an interactive web application designed to eliminate the headache of scheduling complex, time-sensitive laboratory experiments. For any protocol that requires processing multiple samples through the same series of timed steps, StaggR provides the tools to design, visualize, optimize, and execute the workflow with precision and confidence.
 
 It is built for researchers in molecular biology, genomics, biochemistry, and any other field where timing is critical. It solves the difficult problem of determining the optimal "staggering" interval between samples to maximize throughput without creating conflicts where you'd need to be in two places at once.
@@ -114,4 +116,5 @@ The **"About"** tab contains buttons to load pre-configured example protocols re
   * **Fixation Time Course (e.g., for ChIP):** A protocol involving a time-sensitive fixation and quenching reaction across many samples.
   * **Degron Time Course:** A simple protocol for a protein degradation experiment, perfect for use with the "Time Course Helper".
   * **Metabolic RNA Labeling (e.g., 4sU/4tU/BrdU):** A multi-step protocol involving labeling, cell lysis, and purification steps.
+
 
