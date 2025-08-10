@@ -1,0 +1,66 @@
+{
+  "protocol_steps": [
+    {
+      "step_name": "Add Auxin (Depletion Start)",
+      "step_duration_value": 1,
+      "step_duration_unit": "min",
+      "time_to_next_value": 120,
+      "time_to_next_unit": "min",
+      "step_color": "#A6CEE3"
+    },
+    {
+      "step_name": "Add Hydroxyurea and Collect (0 hr)",
+      "step_duration_value": 1,
+      "step_duration_unit": "min",
+      "time_to_next_value": 0.5,
+      "time_to_next_unit": "hr",
+      "step_color": "#1F78B4"
+    },
+    {
+      "step_name": "Collect Sample (0.5 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "time_to_next_value": 0.5,
+      "time_to_next_unit": "hr",
+      "step_color": "#7CA84E"
+    },
+    {
+      "step_name": "Collect Sample (1 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "time_to_next_value": 1,
+      "time_to_next_unit": "hr",
+      "step_color": "#97C46D"
+    },
+    {
+      "step_name": "Collect Sample (2 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "time_to_next_value": 2,
+      "time_to_next_unit": "hr",
+      "step_color": "#B4E18C"
+    },
+    {
+      "step_name": "Collect Sample (4 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "step_color": "#D1FEAA"
+    }
+  ],
+  "accessory_params": {
+    "chartName": "My Time Course",
+    "sampleNames": "Sample 1, Sample 2, Sample 3, Sample 4",
+    "optMode": "auto",
+    "manualIntervalValue": 5,
+    "manualIntervalUnit": "min",
+    "taskSwitchValue": 15,
+    "taskSwitchUnit": "sec",
+    "xAxisValue": 10,
+    "xAxisUnit": "min",
+    "granularity": "0.25",
+    "overbookedColor": "#D7261E",
+    "bufferColor": "#BDBDBD",
+    "shadingColor": "#F0F0F0",
+    "sampleColorBase": "#A6CEE3"
+  }
+}

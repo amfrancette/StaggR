@@ -1,0 +1,67 @@
+{
+  "staggR_version": "2.0",
+  "protocol_steps": [
+    {
+      "step_name": "Add Auxin (Depletion Start)",
+      "step_duration_value": 1,
+      "step_duration_unit": "min",
+      "time_to_next_value": 120,
+      "time_to_next_unit": "min",
+      "step_color": "#655496"
+    },
+    {
+      "step_name": "Add Hydroxyurea and Collect (0 hr)",
+      "step_duration_value": 1,
+      "step_duration_unit": "min",
+      "time_to_next_value": 0.5,
+      "time_to_next_unit": "hr",
+      "step_color": "#57A1D9"
+    },
+    {
+      "step_name": "Collect Sample (0.5 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "time_to_next_value": 0.5,
+      "time_to_next_unit": "hr",
+      "step_color": "#8B9E7B"
+    },
+    {
+      "step_name": "Collect Sample (1 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "time_to_next_value": 1,
+      "time_to_next_unit": "hr",
+      "step_color": "#ACD190"
+    },
+    {
+      "step_name": "Collect Sample (2 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "time_to_next_value": 2,
+      "time_to_next_unit": "hr",
+      "step_color": "#5F9E2C"
+    },
+    {
+      "step_name": "Collect Sample (4 hr)",
+      "step_duration_value": 6,
+      "step_duration_unit": "min",
+      "step_color": "#377306"
+    }
+  ],
+  "accessory_params": {
+    "chartName": "Double drug treatment time course",
+    "sampleNames": "Sample 1: Auxin - HU, \nSample 1: Veh - HU, \nSample 1: Auxin + HU, \nSample 1: Veh + HU,\nSample 2: Auxin - HU, \nSample 2: Veh - HU, \nSample 2: Auxin + HU, \nSample 2: Veh + HU",
+    "optMode": "auto",
+    "manualIntervalValue": 5,
+    "manualIntervalUnit": "min",
+    "taskSwitchValue": 30,
+    "taskSwitchUnit": "sec",
+    "granularity": "1",
+    "xAxisValue": 30,
+    "xAxisUnit": "min",
+    "overbookedColor": "#D7261E",
+    "bufferColor": "#BDBDBD",
+    "shadingColor": "#F0F0F0",
+    "sampleColorBase": "#FC0A6F"
+  }
+}

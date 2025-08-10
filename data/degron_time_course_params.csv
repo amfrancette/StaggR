@@ -1,0 +1,7 @@
+"step_name","step_duration_value","step_duration_unit","time_to_next_value","time_to_next_unit","step_color"
+"Add Auxin (Depletion Start)",1,"min",120,"min","#A6CEE3"
+"Add Hydroxyurea and Collect (0 hr)",1,"min",0.5,"hr","#1F78B4"
+"Collect Sample (0.5 hr)",6,"min",0.5,"hr","#7CA84E"
+"Collect Sample (1 hr)",6,"min",1,"hr","#97C46D"
+"Collect Sample (2 hr)",6,"min",2,"hr","#B4E18C"
+"Collect Sample (4 hr)",6,"min",,,"#D1FEAA"

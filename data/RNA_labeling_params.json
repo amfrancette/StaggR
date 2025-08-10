@@ -1,0 +1,58 @@
+{
+  "protocol_steps": [
+    {
+      "step_name": "Add 4sU (0 hr)",
+      "step_duration_value": 1,
+      "step_duration_unit": "min",
+      "time_to_next_value": 5,
+      "time_to_next_unit": "min",
+      "step_color": "#0B9941"
+    },
+    {
+      "step_name": "Harvest Cells (5 min)",
+      "step_duration_value": 3,
+      "step_duration_unit": "min",
+      "time_to_next_value": 10,
+      "time_to_next_unit": "min",
+      "step_color": "#004A89"
+    },
+    {
+      "step_name": "Harvest Cells (15 min)",
+      "step_duration_value": 3,
+      "step_duration_unit": "min",
+      "time_to_next_value": 15,
+      "time_to_next_unit": "min",
+      "step_color": "#0068A4"
+    },
+    {
+      "step_name": "Harvest Cells (30 min)",
+      "step_duration_value": 3,
+      "step_duration_unit": "min",
+      "time_to_next_value": 30,
+      "time_to_next_unit": "min",
+      "step_color": "#3F89C5"
+    },
+    {
+      "step_name": "Harvest Cells (60 min)",
+      "step_duration_value": 3,
+      "step_duration_unit": "min",
+      "step_color": "#6CABE8"
+    }
+  ],
+  "accessory_params": {
+    "chartName": "RNA Labeling Time Course",
+    "sampleNames": "Cell Line 1: Rep1,\nCell Line 1: Rep2,\nCell Line 1: Rep3,\nCell Line 2: Rep1,\nCell Line 2: Rep2,\nCell Line 2: Rep3,\nCell Line 3: Rep1,\nCell Line 3: Rep2,\nCell Line 3: Rep3,\nCell Line 4: Rep1,\nCell Line 4: Rep2,\nCell Line 4: Rep3",
+    "optMode": "auto",
+    "manualIntervalValue": 5,
+    "manualIntervalUnit": "min",
+    "taskSwitchValue": 30,
+    "taskSwitchUnit": "sec",
+    "xAxisValue": 10,
+    "xAxisUnit": "min",
+    "granularity": "0.5",
+    "overbookedColor": "#D7261E",
+    "bufferColor": "#BDBDBD",
+    "shadingColor": "#F0F0F0",
+    "sampleColorBase": "#180FBD"
+  }
+}
