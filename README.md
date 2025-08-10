@@ -3,7 +3,7 @@
 [](https://www.r-project.org/)
 [](https://shiny.posit.co/)
 
-Use it now at [](https://alexfrancette.shinyapps.io/staggr/)
+Use it now with the [Staggr shiny app](https://alexfrancette.shinyapps.io/staggr/)
 
 **StaggR** is an interactive web application designed to eliminate the headache of scheduling complex, time-sensitive laboratory experiments. For any protocol that requires processing multiple samples through the same series of timed steps, StaggR provides the tools to design, visualize, optimize, and execute the workflow with precision and confidence.
 
