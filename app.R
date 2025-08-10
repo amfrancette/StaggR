@@ -1127,15 +1127,24 @@ server <- function(input, output, session) {
     shinyjs::toggleState("pauseTimer", condition = active && !paused)
     shinyjs::toggleState("stopTimer", condition = active)
   })
-  
   # Event handlers for timer buttons.
   observeEvent(input$startTimer, {
+    # This block handles the "Start" and "Resume" actions for the live timer.
     if (isTRUE(timer_paused())) {
+      # Logic for resuming a paused timer.
       timer_paused(FALSE)
       event_end_at(Sys.time() + time_remaining_at_pause())
       showNotification("Time course resumed.", type = "message")
     } else {
-      req(results()); validate(need(!is.null(schedule_time_df()) && nrow(schedule_time_df()) > 0, "Generate a schedule first."))
+      # Logic for starting a new timer run.
+      sched <- schedule_time_df()
+      
+      # Use a standard 'if' condition for validation within an observer.
+      if (is.null(sched) || nrow(sched) == 0) {
+        showNotification("Please generate a schedule first.", type = "error")
+        return() # Stop execution
+      }
+      
       showNotification("Starting time course...", type = "message")
       timer_pre_start(TRUE); timer_mode("pre"); timer_active(TRUE)
       current_segment_index(0L); experiment_start_at(NULL)
