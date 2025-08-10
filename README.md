@@ -9,8 +9,6 @@ It is built for researchers in molecular biology, genomics, biochemistry, and an
 
 -----
 
-\<br\>
-
 ## Key Features
 
   * **Interactive Gantt Chart:** Visualize your entire experimental timeline, with each sample and every step clearly laid out.
@@ -22,8 +20,6 @@ It is built for researchers in molecular biology, genomics, biochemistry, and an
   * **Exportable Results:** Download your Gantt chart as a high-quality PDF or PNG, and export detailed schedules for your electronic lab notebook.
 
 -----
-
-\<br\>
 
 ## Getting Started
 
@@ -45,8 +41,6 @@ You can run StaggR on your own computer with R and RStudio. The application is d
     ```
 
 -----
-
-\<br\>
 
 ## How to Use the App
 
@@ -113,9 +107,7 @@ Reproducibility is key.
 
 -----
 
-\<br\>
-
-## Built-in Examples 💡
+## Built-in Examples
 
 The **"About"** tab contains buttons to load pre-configured example protocols relevant to research in transcription biology and genomics. Click any of these to see how a complex protocol is set up in StaggR.
 
