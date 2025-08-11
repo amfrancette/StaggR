@@ -807,12 +807,19 @@ server <- function(input, output, session) {
     anchor_idx <- as.integer(input$tcAnchorStep)
     template_idx <- as.integer(input$tcTimeCourseStep)
     
-    validate(need(anchor_idx < template_idx, "The Anchor Step must come before the Time Course Step being replaced."))
+    if (anchor_idx >= template_idx) {
+      showNotification("The Anchor Step must come before the Time Course Step being replaced.", type = "error", duration = 8)
+      return() # Stop execution
+    }
     
     time_points_str <- isolate(input$tcTimePoints)
     time_points_num <- try(suppressWarnings(as.numeric(trimws(strsplit(time_points_str, ",")[[1]]))), silent = TRUE)
-    validate(need(!inherits(time_points_num, "try-error") && !any(is.na(time_points_num)) && all(time_points_num >= 0), "Invalid time points. Must be non-negative, comma-separated numbers."))
     
+    if (inherits(time_points_num, "try-error") || any(is.na(time_points_num)) || !all(time_points_num >= 0)) {
+      showNotification("Invalid time points. Must be non-negative, comma-separated numbers.", type = "error", duration = 8)
+      return() # Stop execution
+    }
+
     time_points_to_add <- sort(unique(time_points_num[time_points_num > 0]))
     if (length(time_points_to_add) == 0) {
       showNotification("No positive time points were provided to add.", type = "warning"); return()
@@ -835,8 +842,8 @@ server <- function(input, output, session) {
     
     post_block <- if (template_idx < nrow(st_from_ui)) st_from_ui[(template_idx + 1):nrow(st_from_ui), ] else NULL
     if (!is.null(post_block)) {
-      ttn_values[n_new_steps] <- template_step$step_duration_value
-      ttn_units[n_new_steps] <- template_step$step_duration_unit
+      ttn_values[n_new_steps] <- template_step$time_to_next_value %||% 10 # Use original TTN from template
+      ttn_units[n_new_steps] <- template_step$time_to_next_unit %||% "min"
     } else {
       ttn_values[n_new_steps] <- NA_real_
       ttn_units[n_new_steps] <- NA_character_
@@ -864,6 +871,7 @@ server <- function(input, output, session) {
     
     showNotification(paste("Replaced step '", st_from_ui$step_name[template_idx], "' with ", n_new_steps, " time course steps.", sep=""), type = "message")
   })
+
   
   # --- Main Calculation and Rendering ---
   
