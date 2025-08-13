@@ -819,7 +819,7 @@ server <- function(input, output, session) {
       showNotification("Invalid time points. Must be non-negative, comma-separated numbers.", type = "error", duration = 8)
       return() # Stop execution
     }
-
+    
     time_points_to_add <- sort(unique(time_points_num[time_points_num > 0]))
     if (length(time_points_to_add) == 0) {
       showNotification("No positive time points were provided to add.", type = "warning"); return()
@@ -871,7 +871,6 @@ server <- function(input, output, session) {
     
     showNotification(paste("Replaced step '", st_from_ui$step_name[template_idx], "' with ", n_new_steps, " time course steps.", sep=""), type = "message")
   })
-
   
   # --- Main Calculation and Rendering ---
   
@@ -1035,7 +1034,7 @@ server <- function(input, output, session) {
   output$scheduleByTime <- DT::renderDataTable({
     df <- schedule_time_df(); if (is.null(df)) return(datatable(data.frame(Status=character())))
     
-    show_status <- isTRUE(timer_active())
+    show_status <- isTRUE(timer_active()) & isTRUE(input$liveTableUpdates)
     base_cols <- if(show_status) c("Status", "Sample", "Step") else c("Sample", "Step")
     visible_cols <- c(base_cols, input$showCols)
     df_display <- df %>% select(any_of(visible_cols))
@@ -1204,12 +1203,29 @@ server <- function(input, output, session) {
   
   # Observer that updates the chronological table rows' status during a live run.
   observe({
-    time_remaining(); req(timer_active(), !is.null(experiment_start_at()), !isTRUE(timer_paused()), isTRUE(input$liveTableUpdates))
-    df <- schedule_time_df(); req(df)
-    now_sec <- as.numeric(difftime(Sys.time(), experiment_start_at(), units = "secs"))
-    starts_sec <- df$TimeNumeric * 60; ends_sec <- (df$TimeNumeric + df$DurationNumeric) * 60
-    df$Status <- ifelse(now_sec >= ends_sec, "past", ifelse(now_sec >= starts_sec & now_sec < ends_sec, "active", "upcoming"))
-    replaceData(dataTableProxy("scheduleByTime"), df %>% select(any_of(c("Status", "Sample", "Step", isolate(input$showCols)))), resetPaging = FALSE, rownames = FALSE)
+    # This observer depends on the timer and the checkbox.
+    time_remaining()
+    
+    # Only execute the update logic if the timer is active AND the box is checked.
+    if (isTRUE(timer_active()) && isTRUE(input$liveTableUpdates)) {
+      req(!is.null(experiment_start_at()), !isTRUE(timer_paused()))
+      
+      df <- schedule_time_df()
+      req(df)
+      
+      now_sec <- as.numeric(difftime(Sys.time(), experiment_start_at(), units = "secs"))
+      starts_sec <- df$TimeNumeric * 60
+      ends_sec <- (df$TimeNumeric + df$DurationNumeric) * 60
+      
+      df$Status <- ifelse(now_sec >= ends_sec, "past", 
+                          ifelse(now_sec >= starts_sec & now_sec < ends_sec, "active", "upcoming"))
+      
+      # Use a proxy to update the data without redrawing the whole table.
+      replaceData(dataTableProxy("scheduleByTime"), 
+                  df %>% select(any_of(c("Status", "Sample", "Step", isolate(input$showCols)))), 
+                  resetPaging = FALSE, 
+                  rownames = FALSE)
+    }
   })
   
   # Renders the text for the sticky header above the chronological schedule.
@@ -1230,8 +1246,15 @@ server <- function(input, output, session) {
   
   # Renders the detailed display for the "Live Time Course" tab.
   output$liveTimerDisplay <- renderUI({
-    if (!timer_active()) return(div(style="text-align: center; padding: 20px;", h4("Ready to start time course."), p("Generate a schedule first, then click 'Start Time Course'.")))
+    # Display an idle message if the timer isn't active.
+    if (!timer_active()) {
+      return(div(style="text-align: center; padding: 20px;",
+                 h4("Ready to start time course."),
+                 p("Generate a schedule first, then click 'Start Time Course'.")
+      ))
+    }
     
+    # These helpers create the styled boxes for the UI.
     make_step_box <- function(row, title, highlight = FALSE) {
       if (is.null(row) || nrow(row) == 0) return(NULL)
       res <- render_data()
@@ -1248,29 +1271,77 @@ server <- function(input, output, session) {
     }
     make_info_box <- function(title, body) { div(class="livecard", style="border: 1px dashed #bbb; border-radius: 6px; padding: 12px; margin-bottom: 12px; background-color:#f7f7f7;", h4(title), body) }
     
+    # Calculate elapsed time strings.
     now <- Sys.time(); t0 <- experiment_start_at(); elapsed_sec <- if (is.null(t0)) 0 else max(0, as.numeric(difftime(now, t0, units = "secs")))
     if(isTRUE(timer_paused())){ res <- results(); if(!is.null(res)){ elapsed_sec <- (max(res$plot_data$end) * 60) - time_remaining_at_pause() } }
     elapsed_str <- format_hhmmss(elapsed_sec / 60)
-    
     countdown_display <- if (isTRUE(timer_paused())) h1(style="font-size: 3.5em; font-weight: bold; color: #E0A800;", "PAUSED") else h1(style="font-size: 3.5em; font-weight: bold;", format_hhmmss(time_remaining()/60))
     
     sched <- schedule_time_df(); req(sched)
+    
+    # --- UI Logic for Pre-Start Countdown View ---
     if (timer_pre_start()) {
-      idx <- if (nrow(sched) >= 1) 1L else NA_integer_
-      row <- if (is.na(idx)) NULL else sched[idx, , drop=FALSE]
-      header_title <- "Countdown to Start"; current_panel <- make_step_box(row, "First Step (up next)", TRUE)
-    } else {
-      segs <- segments(); req(nrow(segs) > 0); sidx <- current_segment_index(); seg <- segs[sidx, ]
-      if (seg$kind == "step") {
-        row  <- sched[seg$idx, , drop=FALSE]; header_title <- "Time Left in Current Step"; current_panel <- make_step_box(row, "Current Step", TRUE)
-      } else {
-        row <- sched[seg$idx, , drop=FALSE]; header_title  <- "Time Until Next Step"; current_panel <- make_info_box("Waiting / Incubation", p("Next: ", row$Sample, " — ", row$Step))
-      }
+      first_idx <- if (nrow(sched) >= 1) 1L else NA_integer_
+      next_idx  <- if (!is.na(first_idx)) .next_step_index(sched, first_idx) else NA_integer_
+      first_row <- if (is.na(first_idx)) NULL else sched[first_idx, , drop=FALSE]
+      next_row  <- if (is.na(next_idx))  NULL else sched[next_idx, , drop=FALSE]
+      
+      return(tagList(
+        fluidRow(
+          column(8, offset = 2,
+                 div(style="text-align: center; background-color: #f2f2f2; border-radius: 10px; padding: 20px;",
+                     h3("Countdown to Start"),
+                     countdown_display,
+                     br(), h5(span(style="opacity:0.8;", "Elapsed since T0: "), strong(elapsed_str))
+                 )
+          )
+        ),
+        br(),
+        fluidRow(
+          column(6, make_step_box(first_row, "First Step (up next)", TRUE)),
+          column(6, make_step_box(next_row,  "Next Step"))
+        )
+      ))
     }
     
+    # --- UI Logic for Main Running View ---
+    segs <- segments(); req(nrow(segs) > 0)
+    sidx <- current_segment_index(); seg <- segs[sidx, ]
+    
+    if (seg$kind == "step") {
+      cur_step_row  <- sched[seg$idx, , drop=FALSE]
+      prev_idx      <- .prev_step_index(sched, seg$idx)
+      next_idx      <- .next_step_index(sched, seg$idx)
+      prev_step_row <- if (is.na(prev_idx)) NULL else sched[prev_idx, , drop=FALSE]
+      next_step_row <- if (is.na(next_idx)) NULL else sched[next_idx, , drop=FALSE]
+      current_panel <- make_step_box(cur_step_row, "Current Step", TRUE)
+      header_title  <- "Time Left in Current Step"
+    } else { # "wait"
+      prev_idx      <- .prev_step_index(sched, seg$idx)
+      next_idx      <- seg$idx
+      prev_step_row <- if (is.na(prev_idx)) NULL else sched[prev_idx, , drop=FALSE]
+      next_step_row <- sched[next_idx, , drop=FALSE]
+      current_panel <- make_info_box("Waiting / Incubation", p("Next: ", next_step_row$Sample, " — ", next_step_row$Step))
+      header_title  <- "Time Until Next Step"
+    }
+    
+    # This tagList defines the final layout for the main running view.
     tagList(
-      fluidRow(column(8, offset=2, div(style="text-align: center; background-color: #f2f2f2; border-radius: 10px; padding: 20px;", h3(header_title), countdown_display, br(), h5(span(style="opacity:0.8;", "Elapsed since T0: "), strong(elapsed_str))))),
-      br(), current_panel
+      fluidRow(
+        column(8, offset = 2,
+               div(style="text-align: center; background-color: #f2f2f2; border-radius: 10px; padding: 20px;",
+                   h3(header_title),
+                   countdown_display,
+                   br(), h5(span(style="opacity:0.8;", "Elapsed since T0: "), strong(elapsed_str))
+               )
+        )
+      ),
+      br(),
+      fluidRow(
+        column(4, make_step_box(prev_step_row, "Previous Step")),
+        column(4, current_panel),
+        column(4, make_step_box(next_step_row, "Next Step"))
+      )
     )
   })
   
@@ -1416,7 +1487,7 @@ server <- function(input, output, session) {
     filename = function() { paste0(gsub("[^A-Za-z0-9_]", "_", input$chartName %||% "Protocol"), "_schedule_by_time.xlsx") },
     content = function(file) {
       res <- render_data(); req(res); df <- schedule_time_df(); req(df)
-      show_status <- isTRUE(timer_active())
+      show_status <- FALSE # Don't include Status column for live updates if downloading the excel
       df_export <- if (!show_status) df %>% select(Sample, Step, Time, Duration, `Wait Until Next` = Wait_Until_Next) else df %>% select(Status, Sample, Step, Time, Duration, `Wait Until Next` = Wait_Until_Next)
       wb <- openxlsx::createWorkbook(); openxlsx::addWorksheet(wb, "Schedule by Time"); openxlsx::writeDataTable(wb, "Schedule by Time", df_export, tableName = "ScheduleByTime")
       hdr_style <- openxlsx::createStyle(textDecoration = "bold"); openxlsx::addStyle(wb, "Schedule by Time", hdr_style, rows = 1, cols = 1:ncol(df_export), gridExpand = TRUE)
@@ -1445,12 +1516,79 @@ server <- function(input, output, session) {
   output$confirmDownloadReport <- downloadHandler(
     filename = function() { paste0(gsub("[^A-Za-z0-9_]", "_", input$chartName %||% "Protocol"), "_StaggR_Report_", Sys.Date(), ".zip") },
     content = function(file) {
-      temp_dir <- file.path(tempdir(), "StaggR_Report"); if (dir.exists(temp_dir)) unlink(temp_dir, recursive = TRUE); dir.create(temp_dir, showWarnings = FALSE, recursive = TRUE)
-      owd <- getwd(); setwd(temp_dir); on.exit(setwd(owd)); files_to_zip <- c()
-      if("plot" %in% input$reportContents) { req(results()); plot_path <- "Gantt_Chart.pdf"; x_int_min <- to_minutes(input$xAxisValue, input$xAxisUnit); plot_to_download <- generate_gantt_plot(results(), TRUE, input$alternateShading, input$shadingColor, x_axis_interval = x_int_min, chart_name = input$chartName, show_hhmmss = input$show_hhmmss, show_wait_times = input$showWaitTimes, is_manual_mode = identical(input$optMode, "manual")); ggsave(plot_path, plot = plot_to_download, device = "pdf", width = 11, height = 8.5, units = "in"); files_to_zip <- c(files_to_zip, plot_path) }
-      if("params" %in% input$reportContents) { req(steps_state()); params_path <- "protocol_parameters.csv"; write.csv(steps_state(), params_path, row.names = FALSE, na = ""); files_to_zip <- c(files_to_zip, params_path) }
-      if("time_sched" %in% input$reportContents) { req(schedule_time_df()); time_path <- "schedule_by_time.csv"; write.csv(schedule_time_df() %>% select(Status, Sample, Step, Time, Duration, Wait_Until_Next), time_path, row.names = FALSE); files_to_zip <- c(files_to_zip, time_path) }
-      if("sample_sched" %in% input$reportContents) { req(schedule_sample_df()); sample_path <- "schedule_by_sample.csv"; write.csv(schedule_sample_df(), sample_path, row.names = TRUE); files_to_zip <- c(files_to_zip, sample_path) }
+      # Create a temporary directory to store files before zipping
+      temp_dir <- file.path(tempdir(), "StaggR_Report")
+      if (dir.exists(temp_dir)) unlink(temp_dir, recursive = TRUE)
+      dir.create(temp_dir, showWarnings = FALSE, recursive = TRUE)
+      
+      # Set working directory to temp and ensure it's reset on exit
+      owd <- getwd(); setwd(temp_dir); on.exit(setwd(owd))
+      
+      files_to_zip <- c() # Initialize list of files to be zipped
+      
+      if("plot" %in% input$reportContents) {
+        req(results())
+        plot_path <- "Gantt_Chart.pdf"
+        x_int_min <- to_minutes(input$xAxisValue, input$xAxisUnit)
+        plot_to_download <- generate_gantt_plot(results(), TRUE, input$alternateShading, input$shadingColor,
+                                                x_axis_interval = x_int_min, chart_name = input$chartName,
+                                                show_hhmmss = input$show_hhmmss, show_wait_times = input$showWaitTimes,
+                                                is_manual_mode = identical(input$optMode, "manual"))
+        ggsave(plot_path, plot = plot_to_download, device = "pdf", width = 11, height = 8.5, units = "in")
+        files_to_zip <- c(files_to_zip, plot_path)
+      }
+      
+      if("params_json" %in% input$reportContents) {
+        req(steps_state())
+        json_path <- "StaggR_Session.json"
+        
+        st <- steps_state(); n_steps <- nrow(st)
+        if (!is.null(input[[paste0("stepName", n_steps)]])) {
+          for (i in 1:n_steps) {
+            st$step_name[i] <- input[[paste0("stepName", i)]]
+            st$step_duration_value[i] <- input[[paste0("stepDuration", i)]]
+            st$step_duration_unit[i] <- input[[paste0("durUnit", i)]]
+            st$step_color[i] <- input[[paste0("stepColor", i)]]
+            if (i < n_steps) {
+              st$time_to_next_value[i] <- input[[paste0("timeToNext", i)]]
+              st$time_to_next_unit[i] <- input[[paste0("ttnUnit", i)]]
+            }
+          }
+        }
+        accessory_params <- list(
+          chartName = input$chartName, sampleNames = input$sampleNames,
+          optMode = input$optMode, manualIntervalValue = input$manualIntervalValue,
+          manualIntervalUnit = input$manualIntervalUnit, taskSwitchValue = input$taskSwitchValue,
+          taskSwitchUnit = input$taskSwitchUnit, granularity = input$granularity,
+          xAxisValue = input$xAxisValue, xAxisUnit = input$xAxisUnit,
+          overbookedColor = input$overbookedColor, bufferColor = input$bufferColor,
+          shadingColor = input$shadingColor, sampleColorBase = input$sampleColorBase
+        )
+        full_session <- list(staggR_version = "2.0", protocol_steps = st, accessory_params = accessory_params)
+        write(jsonlite::toJSON(full_session, pretty = TRUE, auto_unbox = TRUE), json_path)
+        files_to_zip <- c(files_to_zip, json_path)
+      }
+      
+      if("params_csv" %in% input$reportContents) {
+        req(steps_state())
+        params_path <- "protocol_parameters.csv"
+        write.csv(steps_state(), params_path, row.names = FALSE, na = "")
+        files_to_zip <- c(files_to_zip, params_path)
+      }
+      
+      if("time_sched" %in% input$reportContents) {
+        req(schedule_time_df())
+        time_path <- "schedule_by_time.csv"
+        write.csv(schedule_time_df() %>% select(Status, Sample, Step, Time, Duration, Wait_Until_Next), time_path, row.names = FALSE)
+        files_to_zip <- c(files_to_zip, time_path)
+      }
+      if("sample_sched" %in% input$reportContents) {
+        req(schedule_sample_df())
+        sample_path <- "schedule_by_sample.csv"
+        write.csv(schedule_sample_df(), sample_path, row.names = TRUE)
+        files_to_zip <- c(files_to_zip, sample_path)
+      }
+      
       zip::zip(zipfile = file, files = files_to_zip)
     },
     contentType = "application/zip"
@@ -1459,7 +1597,21 @@ server <- function(input, output, session) {
   # --- Modals for Help and Downloads ---
   observeEvent(input$toggleAdvanced, { shinyjs::toggle(id = "advancedOptions", anim = TRUE) })
   observeEvent(input$downloadPlotModal, { showModal(modalDialog(title = "Download Plot", selectInput("plotFormat", "File Format:", c("pdf", "png", "jpeg", "tiff")), numericInput("plotWidth", "Width (inches):", 10, min = 1, max = 20), numericInput("plotHeight", "Height (inches):", 8, min = 1, max = 20), checkboxInput("plotShowLegend", "Show Legend", input$showLegendMain), footer = tagList(modalButton("Cancel"), downloadButton("confirmDownloadPlot", "Download")))) })
-  observeEvent(input$downloadReportModal, { showModal(modalDialog(title = "Download Full Report", p("Select the components to include in the .zip archive."), checkboxGroupInput("reportContents", "Include:", choices = c("Gantt Chart (PDF)" = "plot", "Session Parameters (.json)" = "params", "Chronological Schedule (CSV)" = "time_sched", "Per-Sample Schedule (CSV)" = "sample_sched"), selected = c("plot", "params", "time_sched", "sample_sched")), footer = tagList(modalButton("Cancel"), downloadButton("confirmDownloadReport", "Download .zip")))) })
+  observeEvent(input$downloadReportModal, { 
+    showModal(modalDialog(title = "Download Full Report", p("Select the components to include in the .zip archive."), 
+                          checkboxGroupInput("reportContents", "Include:", 
+                                             choices = c(
+                                               "Gantt Chart (PDF)" = "plot", 
+                                               "Full Session (.json)" = "params_json",
+                                               "Protocol Parameters (.csv)" = "params_csv", 
+                                               "Chronological Schedule (CSV)" = "time_sched", 
+                                               "Per-Sample Schedule (CSV)" = "sample_sched"
+                                             ), 
+                                             selected = c("plot", "params_json", "time_sched", "sample_sched")
+                          ), 
+                          footer = tagList(modalButton("Cancel"), downloadButton("confirmDownloadReport", "Download .zip")))
+    ) 
+  })
   observeEvent(input$help_saveload, { showModal(modalDialog(title = "Save & Load Functionality", tags$p(tags$strong("Save Session (.json):"), "Saves your complete experiment, including the protocol, sample names, buffer times, colors, and all other settings. This is the recommended way to save your work for full reproducibility."), tags$p(tags$strong("Save Protocol (.csv):"), "Saves only the table of protocol steps (name, duration, wait time). This is useful for sharing just the core protocol with a colleague or for use in other programs."), tags$p(tags$strong("Upload File:"), "You can upload either a full .json session file to restore all settings, or a legacy .csv protocol file to overwrite only the current step definitions."), easyClose = TRUE, footer = modalButton("Close"))) })
   
 }
