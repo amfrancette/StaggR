@@ -24,7 +24,7 @@
     }
   ],
   "accessory_params": {
-    "chartName": "RNA Labeling Time Course",
+    "chartName": "Formaldehyde Fixation",
     "sampleNames": "Well A1, Well A2, Well A3, Well A4, Well B1, Well B2, Well B3, Well B4, Well C1, Well C2, Well C3, Well C4",
     "optMode": "auto",
     "manualIntervalValue": 5,
