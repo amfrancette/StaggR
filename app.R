@@ -1,9 +1,9 @@
 # ==============================================================================
 # StaggR: An Interactive Shiny App for Optimizing Staggered Protocols
-# Version 1.0
+# Version 1.1.1
 #
 # Author: Alex Francette
-# Date: 2025-08-10
+# Date: 2025-12-08
 #
 # Description:
 # This application provides a graphical user interface to design, optimize,
@@ -134,6 +134,90 @@ unit_choices <- c("sec","min","hr")
 # ------------------------------------------------------------------------------
 # This is the main engine of the app. It takes all protocol parameters and an interval,
 # then calculates the complete schedule, including hands-on times and potential conflicts.
+findOptimalInterval <- function(step_durations, time_to_next, n_samples, 
+                                granularity, buffer_time, max_iterations = 20000) {
+  
+  # dummy test values
+  # step_durations <- c(10, 20, 15); time_to_next <- c(5, 10); n_samples <- 4; granularity <- 0.25; buffer_time <- 0; max_iterations <- 20000
+  # 1. Edge Case Handling
+  if (n_samples < 2) return(0)
+  n_steps <- length(step_durations)
+  if (n_steps == 0) return(0)
+  
+  # 2. Calculate Base Profile (Single Sample Busy Times)
+  # This recreates the "physics" of a single run to see where the blocks are
+  step_starts <- numeric(n_steps)
+  step_starts[1] <- 0
+  if (n_steps > 1) {
+    for (k in 2:n_steps) {
+      step_starts[k] <- step_starts[k-1] + step_durations[k-1] + time_to_next[k-1]
+    }
+  }
+  
+  # Define "Busy" windows (Start to End + Buffer)
+  base_starts <- step_starts
+  base_ends   <- step_starts + step_durations + buffer_time
+  
+  # Total duration of one sample (used to optimize the loop)
+  single_sample_duration <- if(length(base_ends) > 0) max(base_ends) else 0
+  
+  # 3. The Optimization Loop
+  i <- granularity
+  solution_found <- FALSE
+  current_iteration <- 0
+  
+  while(!solution_found && current_iteration < max_iterations) {
+    current_iteration <- current_iteration + 1
+    has_conflict <- FALSE
+    
+    # LOGIC SHORTCUT:
+    # Only check if Sample 1 overlaps with shifted versions of itself (Samples 2, 3...)
+    # Stop checking if the shift is larger than the whole protocol duration.
+    max_k <- if(i > 0) ceiling(single_sample_duration / i) else n_samples
+    k_limit <- min(n_samples - 1, max_k)
+    
+    if (k_limit > 0) {
+      # Vectorized check for all relevant subsequent samples
+      k_vec <- 1:k_limit
+      shifts <- k_vec * i
+      
+      # Compare the Base Sample against ALL shifted samples at once using outer()
+      # This creates matrices of starts and ends
+      # Overlap Logic: (StartA < EndB) AND (EndA > StartB)
+      
+      # Dimensions: [Rows = Steps, Cols = Shifts]
+      shifted_starts_mat <- outer(base_starts, shifts, "+")
+      shifted_ends_mat   <- outer(base_ends,   shifts, "+")
+      
+      # Check if ANY step in the base sample overlaps with ANY step in the shifted samples.
+      # Iterate over the shifts (k) 
+      
+      for (col_idx in seq_along(shifts)) {
+        s_starts <- shifted_starts_mat[, col_idx]
+        s_ends   <- shifted_ends_mat[, col_idx]
+        
+        # Check Base Steps vs Shifted Steps (Matrix comparison)
+        overlaps <- outer(base_starts, s_ends, "<") & outer(base_ends, s_starts, ">")
+        
+        if (any(overlaps)) {
+          has_conflict <- TRUE
+          break # Conflict found for this interval 'i', stop checking k
+        }
+      }
+    }
+    
+    if (has_conflict) {
+      i <- i + granularity
+    } else {
+      solution_found <- TRUE
+    }
+  }
+  
+  if (solution_found && i >= single_sample_duration) {
+    return("No Stagger Time < Protocol Duration Identified. Consider Decreasing Granularity, Number of Damples, or Step-durration.")
+  } else if (solution_found) return(i) else return(NULL)
+}
+
 calculateStaggering <- function(step_names, time_to_next, step_duration, n_samples, custom_sample_names,
                                 custom_colors, interval, task_switching_time, overbooked_color, buffer_color) {
   
@@ -162,16 +246,36 @@ calculateStaggering <- function(step_names, time_to_next, step_duration, n_sampl
   padded_step_duration <- step_duration + task_switching_time
   
   # Generate a data frame of all step events (start and end times) for all samples.
-  plot_events <- data.frame()
-  for (sample_j in 0:(n_samples - 1)) {
-    sample_step_starts <- step_starts + (sample_j * interval)
-    step_ends <- sample_step_starts + step_duration
-    sample_events <- data.frame(
-      Sample = custom_sample_names[sample_j + 1], Step = step_names,
-      start = sample_step_starts, end = step_ends
-    )
-    plot_events <- rbind(plot_events, sample_events)
-  }
+  # 1. Pre-calculate the "Single Sample" profile once
+  # (You already have 'step_starts' and 'step_ends' for one sample)
+  single_starts <- step_starts
+  single_ends   <- step_starts + step_duration
+  
+  # 2. Generate the offsets for all samples at once
+  offsets <- (0:(n_samples - 1)) * interval
+  
+  # 3. Use 'outer' to add offsets to base times (Matrix Math)
+  # This creates a matrix where rows are steps and columns are samples
+  all_starts_matrix <- outer(single_starts, offsets, "+")
+  all_ends_matrix   <- outer(single_ends, offsets, "+")
+  
+  # 4. Flatten matrices into vectors
+  flat_starts <- as.vector(all_starts_matrix)
+  flat_ends   <- as.vector(all_ends_matrix)
+  
+  # 5. Create the columns for names
+  # 'each' repeats AAABBB, 'times' repeats ABCABC
+  flat_samples <- rep(custom_sample_names, each = n_steps)
+  flat_steps   <- rep(step_names, times = n_samples)
+  
+  # 6. Build the dataframe 
+  plot_events <- data.frame(
+    Sample = flat_samples,
+    Step   = flat_steps,
+    start  = flat_starts,
+    end    = flat_ends,
+    stringsAsFactors = FALSE 
+  )
   
   # Set up factor levels for correct plotting order.
   y_levels <- rev(c(custom_sample_names, "Hands-On Time"))
@@ -898,37 +1002,25 @@ server <- function(input, output, session) {
     final_interval <- if (identical(input$optMode, "auto")) {
       showNotification("Finding optimal interval...", type = "message", duration = NULL, id = "optim_msg")
       
-      step_starts <- numeric(n_steps)
-      if (n_steps > 0) {
-        step_starts[1] <- 0
-        if (n_steps > 1) { for (k in 2:n_steps) { step_starts[k] <- step_starts[k-1] + step_durationM[k-1] + ttnM[k-1] } }
-      }
+      # Call the helper function
+      opt_val <- findOptimalInterval(
+        step_durations = step_durationM,
+        time_to_next = ttnM,
+        n_samples = input$nSamples,
+        granularity = as.numeric(input$granularity),
+        buffer_time = buffer_min
+      )
       
-      padded_step_duration <- step_durationM + buffer_min
-      i <- as.numeric(input$granularity)
-      solution_found <- FALSE; max_iterations <- 20000; current_iteration <- 0
-      
-      while(!solution_found && current_iteration < max_iterations) {
-        current_iteration <- current_iteration + 1
-        all_events <- data.frame()
-        for (sample_j in 0:(input$nSamples - 1)) {
-          sample_step_starts <- step_starts + (sample_j * i)
-          step_ends    <- sample_step_starts + padded_step_duration
-          all_events   <- rbind(all_events, data.frame(start_time = sample_step_starts, end_time = step_ends))
-        }
-        time_points <- sort(unique(c(all_events$start_time, all_events$end_time)))
-        if (length(time_points) < 2) { solution_found <- TRUE; break }
-        occupancy <- sapply(1:(length(time_points)-1), function(j) {
-          mid_point <- (time_points[j] + time_points[j+1]) / 2
-          sum(all_events$start_time <= mid_point & all_events$end_time > mid_point)
-        })
-        if (any(occupancy > 1)) i <- i + as.numeric(input$granularity) else solution_found <- TRUE
+      if (is.null(opt_val)) {
+        showNotification("Optimizer could not find a valid schedule. Consider reducing sample number, optimizer granularity, buffer time, or operation durrations", type = "error", duration = 8)
+        return(NULL)
+      } else if(is.character(opt_val)) {
+        showNotification(opt_val, type = "error", duration = 8)
       }
-      if (!solution_found) {
-        showNotification("Optimizer could not find a valid schedule.", type = "error", duration = 8); return(NULL)
-      }
-      i
-    } else { to_minutes(input$manualIntervalValue, input$manualIntervalUnit) }
+      opt_val
+    } else { 
+      to_minutes(input$manualIntervalValue, input$manualIntervalUnit) 
+    }
     
     req(final_interval)
     
