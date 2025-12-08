@@ -1,0 +1,42 @@
+{
+  "protocol_steps": [
+    {
+      "step_name": "Add Drug (T=0)",
+      "step_duration_value": 1,
+      "step_duration_unit": "min",
+      "time_to_next_value": 60,
+      "time_to_next_unit": "min",
+      "step_color": "#0B7D17"
+    },
+    {
+      "step_name": "Wash & Start Fixation",
+      "step_duration_value": 5,
+      "step_duration_unit": "min",
+      "time_to_next_value": 15,
+      "time_to_next_unit": "min",
+      "step_color": "#1F3AB5"
+    },
+    {
+      "step_name": "Wash & Halt Fixation",
+      "step_duration_value": 5,
+      "step_duration_unit": "min",
+      "step_color": "#F70369"
+    }
+  ],
+  "accessory_params": {
+    "chartName": "Formaldehyde Fixation",
+    "sampleNames": "Well A1, Well A2, Well A3, Well A4, Well B1, Well B2, Well B3, Well B4, Well C1, Well C2, Well C3, Well C4",
+    "optMode": "auto",
+    "manualIntervalValue": 5,
+    "manualIntervalUnit": "min",
+    "taskSwitchValue": 30,
+    "taskSwitchUnit": "sec",
+    "xAxisValue": 10,
+    "xAxisUnit": "min",
+    "granularity": "0.5",
+    "overbookedColor": "#D7261E",
+    "bufferColor": "#BDBDBD",
+    "shadingColor": "#F0F0F0",
+    "sampleColorBase": "#E60E7A"
+  }
+}

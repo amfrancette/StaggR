@@ -1,0 +1,12 @@
+name: staggr
+title:
+username: alexfrancette
+account: alexfrancette
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15184125
+bundleId: 11293790
+url: https://alexfrancette.shinyapps.io/staggr/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

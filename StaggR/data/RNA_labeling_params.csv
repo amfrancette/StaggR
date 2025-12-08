@@ -1,0 +1,6 @@
+"step_name","step_duration_value","step_duration_unit","time_to_next_value","time_to_next_unit","step_color"
+"Add 4sU (0 hr)",1,"min",5,"min","#0B9941"
+"Harvest Cells (5 min)",3,"min",10,"min","#004A89"
+"Harvest Cells (15 min)",3,"min",15,"min","#0068A4"
+"Harvest Cells (30 min)",3,"min",30,"min","#3F89C5"
+"Harvest Cells (60 min)",3,"min",,,"#6CABE8"

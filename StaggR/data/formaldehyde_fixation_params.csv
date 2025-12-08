@@ -1,0 +1,4 @@
+"step_name","step_duration_value","step_duration_unit","time_to_next_value","time_to_next_unit","step_color"
+"Add Drug (T=0)",1,"min",60,"min","#0B7D17"
+"Wash & Start Fixation",5,"min",15,"min","#1F3AB5"
+"Wash & Halt Fixation",5,"min",,,"#F70369"

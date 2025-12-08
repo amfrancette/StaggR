@@ -1,0 +1,11 @@
+library/
+local/
+cellar/
+lock/
+python/
+sandbox/
+staging/
+.DS_Store
+.Rhistory
+.Rprofile
+.RData
