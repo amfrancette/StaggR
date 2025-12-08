@@ -9,7 +9,6 @@ It is built for researchers in molecular biology, genomics, biochemistry, and an
 
 -----
 
-\<br\>
 
 ## Key Features
 
@@ -23,7 +22,6 @@ It is built for researchers in molecular biology, genomics, biochemistry, and an
 
 -----
 
-\<br\>
 
 ## Getting Started
 
@@ -46,7 +44,6 @@ You can run StaggR on your own computer with R and RStudio. The application is d
 
 -----
 
-\<br\>
 
 ## How to Use the App
 
