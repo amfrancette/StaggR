@@ -1,4 +1,4 @@
-# StaggR: The Staggered Protocol Scheduling Optimizer 🧪
+# StaggR: The Staggered Protocol Scheduling Optimizer 
 
 [](https://www.r-project.org/)
 [](https://shiny.posit.co/)
