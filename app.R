@@ -1,9 +1,9 @@
 # ==============================================================================
 # StaggR: An Interactive Shiny App for Optimizing Staggered Protocols
-# Version 1.1.1
+# Version 1.1.2
 #
 # Author: Alex Francette
-# Date: 2025-12-08
+# Date: 2025-12-09
 #
 # Description:
 # This application provides a graphical user interface to design, optimize,
@@ -12,7 +12,6 @@
 # particularly useful for time-course experiments in molecular biology,
 # biochemistry, and other experimental sciences.
 # ==============================================================================
-
 
 # --- 1. Load Required Libraries ---
 # ------------------------------------------------------------------------------
@@ -373,6 +372,7 @@ calculateStaggering <- function(step_names, time_to_next, step_duration, n_sampl
     mutate(Duration = end - start) %>%
     select(Sample, Step, Time = start, Duration) %>%
     arrange(Time, Sample, Step)
+  
   
   # Return a list containing all processed data frames and plot settings.
   list(
@@ -820,9 +820,11 @@ server <- function(input, output, session) {
   # Synchronizes sample names with the "Number of Samples" input.
   observeEvent(input$nSamples, {
     req(input$nSamples > 0);
-    current_names <- isolate(trimws(strsplit(input$sampleNames, ",")[[1]]));
-    current_names <- current_names[current_names != ""]
-    target_n <- as.integer(input$nSamples); current_n <- length(current_names)
+    current_names <- isolate({
+      raw_names <- trimws(unlist(strsplit(input$sampleNames, "[,\\n]")))
+      raw_names[raw_names != ""]
+    })
+    target_n <- as.inateger(input$nSamples); current_n <- length(current_names)
     if (target_n == current_n) return()
     if (target_n > current_n) {
       new_names <- c(current_names, paste0("Sample ", (current_n + 1):target_n))
@@ -834,7 +836,8 @@ server <- function(input, output, session) {
   
   # Synchronizes "Number of Samples" with the custom names entered.
   observeEvent(input$sampleNames, {
-    custom_names <- trimws(strsplit(input$sampleNames, ",")[[1]]); custom_names <- custom_names[custom_names != ""]
+    custom_names <- trimws(unlist(strsplit(input$sampleNames, "[,\\n]")))
+    custom_names <- custom_names[custom_names != ""]
     new_count <- length(custom_names)
     if (new_count > 0 && new_count != isolate(input$nSamples)) {
       updateNumericInput(session, "nSamples", value = new_count)
@@ -995,7 +998,8 @@ server <- function(input, output, session) {
     step_durationM <- to_minutes(step_dur_val_in, step_dur_unit_in)
     ttnM <- to_minutes(ttn_val_in, ttn_unit_in)
     
-    custom_sample_names <- trimws(unlist(strsplit(input$sampleNames, ",")))
+    custom_sample_names <- trimws(unlist(strsplit(input$sampleNames, "[,\\n]")))
+    custom_sample_names <- custom_sample_names[custom_sample_names != ""]
     buffer_min <- to_minutes(input$taskSwitchValue, input$taskSwitchUnit)
     
     # Determine the staggering interval, either automatically or from manual input.
@@ -1044,7 +1048,7 @@ server <- function(input, output, session) {
     req(res)
     
     n_steps <- res$n_steps
-    step_names_in_order <- isolate(steps_state()$step_name[1:n_steps])
+    step_names_in_order <- sapply(1:n_steps, function(i) input[[paste0("stepName", i)]])
     
     step_colors_live <- sapply(1:n_steps, function(i) input[[paste0("stepColor", i)]])
     names(step_colors_live) <- step_names_in_order
