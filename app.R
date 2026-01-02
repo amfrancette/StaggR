@@ -130,20 +130,18 @@ from_minutes <- function(x_min, unit) {
 unit_choices <- c("sec","min","hr")
 
 # --- Sample name parsing/formatting helpers ---
+# NOTE: Commas are treated as separators. Do not use commas inside a sample name.
 # Accept either newline-separated or comma-separated lists.
 # Also trims whitespace and strips trailing commas often present in example files.
 parse_sample_names <- function(x) {
   if (is.null(x) || length(x) == 0) return(character(0))
   txt <- paste(x, collapse = "\n")
   txt <- gsub("\r\n?", "\n", txt)
-
-  # Prefer newline splitting when present (safer for names that might contain commas).
-  parts <- if (grepl("\n", txt, fixed = TRUE)) {
-    unlist(strsplit(txt, "\n", fixed = TRUE))
-  } else {
-    unlist(strsplit(txt, ",", fixed = TRUE))
-  }
-
+  
+  # Split on either newline or comma.
+  # (If a user includes commas inside a name, it will be split; we document this in the UI.)
+  parts <- unlist(strsplit(txt, "[,\n]"))
+  
   parts <- trimws(parts)
   # Strip trailing delimiter punctuation (common in bundled example files)
   parts <- gsub("[,;]+$", "", parts)
@@ -255,7 +253,7 @@ calculateStaggering <- function(step_names, time_to_next, step_duration, n_sampl
   if (length(custom_sample_names) != n_samples) {
     stop(paste("Number of custom sample names (", length(custom_sample_names), ") does not match nSamples (", n_samples, ")."))
   }
-
+  
   # Factor levels cannot contain duplicates; make sample names unique if needed.
   # We do this inside the core engine so callers can't accidentally crash the app.
   if (anyDuplicated(custom_sample_names)) {
@@ -511,8 +509,13 @@ ui <- fluidPage(
           column(9, numericInput("nSamples", "Number of Samples", 4, min = 1, max = 100)),
           column(3, actionLink("help_nSamples", icon("question-circle"), style = "margin-top: 30px;"))
         ),
-        textAreaInput("sampleNames", "Custom Sample Names (comma- or newline-separated):", 
-                value = paste0("Sample ", 1:4, collapse = "\n"), rows = 3),
+        textAreaInput(
+          "sampleNames",
+          "Custom Sample Names (commas and new lines are treated as separators):",
+          value = paste0("Sample ", 1:4, collapse = "\n"),
+          rows = 3
+        ),
+        helpText("Tip: Avoid commas within sample names (commas split names)."),
         
         hr(),
         fluidRow(
@@ -745,7 +748,7 @@ server <- function(input, output, session) {
   
   # A flag to prevent the nSteps observer from misfiring during programmatic updates.
   suppress_nsteps_sync <- reactiveVal(FALSE)
-
+  
   # Flags to prevent sample name/count observers from triggering each other in a loop.
   suppress_sample_count_sync <- reactiveVal(FALSE)
   suppress_sample_names_sync <- reactiveVal(FALSE)
@@ -862,10 +865,10 @@ server <- function(input, output, session) {
       suppress_sample_count_sync(FALSE)
       return()
     }
-
+    
     req(input$nSamples > 0)
     current_names <- isolate(parse_sample_names(input$sampleNames))
-
+    
     target_n <- as.integer(input$nSamples)
     current_n <- length(current_names)
     if (target_n == current_n) return()
@@ -874,7 +877,7 @@ server <- function(input, output, session) {
     } else {
       new_names <- current_names[1:target_n]
     }
-
+    
     suppress_sample_names_sync(TRUE)
     updateTextAreaInput(session, "sampleNames", value = format_sample_names(new_names, prefer_newlines = TRUE))
   }, ignoreInit = TRUE)
@@ -885,7 +888,7 @@ server <- function(input, output, session) {
       suppress_sample_names_sync(FALSE)
       return()
     }
-
+    
     custom_names <- parse_sample_names(input$sampleNames)
     new_count <- length(custom_names)
     if (new_count > 0 && new_count != isolate(input$nSamples)) {
@@ -893,7 +896,7 @@ server <- function(input, output, session) {
       updateNumericInput(session, "nSamples", value = new_count)
     }
   }, ignoreInit = TRUE)
-
+  
   # --- Help Modals (Question Mark Icons) ---
   observeEvent(input$help_nSamples, {
     showModal(modalDialog(
@@ -901,14 +904,15 @@ server <- function(input, output, session) {
       tags$p("Set how many samples you want to run through the same protocol."),
       tags$ul(
         tags$li("This value is kept in sync with the Custom Sample Names box."),
-        tags$li("If you edit the names list (comma- or newline-separated), the sample count will update automatically."),
+        tags$li("Enter one sample name per line. Commas are treated as separators."),
+        tags$li("Do not use commas inside a sample name (they will split the name)."),
         tags$li("Tip: Keep sample names unique to avoid confusion in tables and plots.")
       ),
       easyClose = TRUE,
       footer = modalButton("Close")
     ))
   })
-
+  
   observeEvent(input$help_nSteps, {
     showModal(modalDialog(
       title = "Number of Steps",
@@ -922,7 +926,7 @@ server <- function(input, output, session) {
       footer = modalButton("Close")
     ))
   })
-
+  
   observeEvent(input$help_granularity, {
     showModal(modalDialog(
       title = "Optimizer Granularity",
@@ -1092,7 +1096,7 @@ server <- function(input, output, session) {
     ttnM <- to_minutes(ttn_val_in, ttn_unit_in)
     
     custom_sample_names <- parse_sample_names(input$sampleNames)
-
+    
     if (length(custom_sample_names) != as.integer(input$nSamples)) {
       showNotification(
         paste0(
@@ -1104,7 +1108,7 @@ server <- function(input, output, session) {
       )
       return(NULL)
     }
-
+    
     if (anyDuplicated(custom_sample_names)) {
       showNotification("Duplicate sample names detected; auto-disambiguating (e.g., adding .1, .2).", type = "warning", duration = 8)
       custom_sample_names <- make.unique(custom_sample_names)
@@ -1208,7 +1212,7 @@ server <- function(input, output, session) {
     df %>% select(Status, Sample, Step, Time, Duration, Wait_Until_Next, TimeNumeric, DurationNumeric)
   })
   
- 
+  
   schedule_sample_df <- reactive({
     res <- results(); if (is.null(res)) return(NULL)
     df <- res$schedule_by_sample
@@ -1586,7 +1590,7 @@ server <- function(input, output, session) {
       write(jsonlite::toJSON(full_session, pretty = TRUE, auto_unbox = TRUE), file)
     }
   )
-
+  
   # Download a minimal example session file to demonstrate the expected JSON format.
   output$downloadSampleSession <- downloadHandler(
     filename = function() {
@@ -1645,7 +1649,7 @@ server <- function(input, output, session) {
     
     protocol_df <- as.data.frame(params$protocol_steps)
     accessory <- params$accessory_params
-
+    
     # Normalize and sync sample names/count from loaded session.
     loaded_names <- parse_sample_names(accessory$sampleNames %||% "")
     if (length(loaded_names) == 0) {
@@ -1654,13 +1658,13 @@ server <- function(input, output, session) {
     
     # Update all UI inputs from the loaded data.
     updateTextInput(session, "chartName", value = accessory$chartName)
-
+    
     suppress_sample_names_sync(TRUE)
     updateTextAreaInput(session, "sampleNames", value = format_sample_names(loaded_names, prefer_newlines = TRUE))
-
+    
     suppress_sample_count_sync(TRUE)
     updateNumericInput(session, "nSamples", value = length(loaded_names))
-
+    
     updateRadioButtons(session, "optMode", selected = accessory$optMode)
     updateNumericInput(session, "manualIntervalValue", value = accessory$manualIntervalValue)
     updateSelectInput(session, "manualIntervalUnit", selected = accessory$manualIntervalUnit)
