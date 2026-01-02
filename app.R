@@ -129,6 +129,34 @@ from_minutes <- function(x_min, unit) {
 # Defines the standard unit choices available in the UI.
 unit_choices <- c("sec","min","hr")
 
+# --- Sample name parsing/formatting helpers ---
+# Accept either newline-separated or comma-separated lists.
+# Also trims whitespace and strips trailing commas often present in example files.
+parse_sample_names <- function(x) {
+  if (is.null(x) || length(x) == 0) return(character(0))
+  txt <- paste(x, collapse = "\n")
+  txt <- gsub("\r\n?", "\n", txt)
+
+  # Prefer newline splitting when present (safer for names that might contain commas).
+  parts <- if (grepl("\n", txt, fixed = TRUE)) {
+    unlist(strsplit(txt, "\n", fixed = TRUE))
+  } else {
+    unlist(strsplit(txt, ",", fixed = TRUE))
+  }
+
+  parts <- trimws(parts)
+  # Strip trailing delimiter punctuation (common in bundled example files)
+  parts <- gsub("[,;]+$", "", parts)
+  parts <- trimws(parts)
+  parts <- parts[parts != ""]
+  parts
+}
+
+format_sample_names <- function(sample_names, prefer_newlines = TRUE) {
+  if (is.null(sample_names) || length(sample_names) == 0) return("")
+  if (prefer_newlines) paste(sample_names, collapse = "\n") else paste(sample_names, collapse = ", ")
+}
+
 # --- 3. Core Calculation Function ---
 # ------------------------------------------------------------------------------
 # This is the main engine of the app. It takes all protocol parameters and an interval,
@@ -226,6 +254,12 @@ calculateStaggering <- function(step_names, time_to_next, step_duration, n_sampl
   }
   if (length(custom_sample_names) != n_samples) {
     stop(paste("Number of custom sample names (", length(custom_sample_names), ") does not match nSamples (", n_samples, ")."))
+  }
+
+  # Factor levels cannot contain duplicates; make sample names unique if needed.
+  # We do this inside the core engine so callers can't accidentally crash the app.
+  if (anyDuplicated(custom_sample_names)) {
+    custom_sample_names <- make.unique(custom_sample_names)
   }
   
   # Calculate the start time of each step for a single sample workflow.
@@ -477,8 +511,8 @@ ui <- fluidPage(
           column(9, numericInput("nSamples", "Number of Samples", 4, min = 1, max = 100)),
           column(3, actionLink("help_nSamples", icon("question-circle"), style = "margin-top: 30px;"))
         ),
-        textAreaInput("sampleNames", "Custom Sample Names (comma-separated):", 
-                      value = paste0("Sample ", 1:4, collapse = ", "), rows = 3),
+        textAreaInput("sampleNames", "Custom Sample Names (comma- or newline-separated):", 
+                value = paste0("Sample ", 1:4, collapse = "\n"), rows = 3),
         
         hr(),
         fluidRow(
@@ -559,6 +593,7 @@ ui <- fluidPage(
           column(3, actionLink("help_saveload", icon("question-circle"), style = "margin-top: 12px; font-size: 1.2em;"))
         ),
         fileInput("uploadSession", "Upload File", accept = c(".csv", ".json")),
+        downloadButton("downloadSampleSession", "Download Sample Session (.json)", class = "btn-block", style="margin-top: 5px;"),
         fluidRow(
           column(6, downloadButton("saveSession", "Save Session (.json)", class = "btn-block", style="margin-top: 5px;")),
           column(6, downloadButton("saveProtocol", "Save Protocol (.csv)", class = "btn-block", style="margin-top: 5px;"))
@@ -710,6 +745,10 @@ server <- function(input, output, session) {
   
   # A flag to prevent the nSteps observer from misfiring during programmatic updates.
   suppress_nsteps_sync <- reactiveVal(FALSE)
+
+  # Flags to prevent sample name/count observers from triggering each other in a loop.
+  suppress_sample_count_sync <- reactiveVal(FALSE)
+  suppress_sample_names_sync <- reactiveVal(FALSE)
   
   # Synchronizes the protocol state when the "Number of Steps" input changes.
   observeEvent(input$nSteps, {
@@ -819,30 +858,84 @@ server <- function(input, output, session) {
   
   # Synchronizes sample names with the "Number of Samples" input.
   observeEvent(input$nSamples, {
-    req(input$nSamples > 0);
-    current_names <- isolate({
-      raw_names <- trimws(unlist(strsplit(input$sampleNames, "[,\\n]")))
-      raw_names[raw_names != ""]
-    })
-    target_n <- as.inateger(input$nSamples); current_n <- length(current_names)
+    if (isTRUE(suppress_sample_count_sync())) {
+      suppress_sample_count_sync(FALSE)
+      return()
+    }
+
+    req(input$nSamples > 0)
+    current_names <- isolate(parse_sample_names(input$sampleNames))
+
+    target_n <- as.integer(input$nSamples)
+    current_n <- length(current_names)
     if (target_n == current_n) return()
     if (target_n > current_n) {
       new_names <- c(current_names, paste0("Sample ", (current_n + 1):target_n))
     } else {
       new_names <- current_names[1:target_n]
     }
-    updateTextAreaInput(session, "sampleNames", value = paste(new_names, collapse = ", "))
+
+    suppress_sample_names_sync(TRUE)
+    updateTextAreaInput(session, "sampleNames", value = format_sample_names(new_names, prefer_newlines = TRUE))
   }, ignoreInit = TRUE)
   
   # Synchronizes "Number of Samples" with the custom names entered.
   observeEvent(input$sampleNames, {
-    custom_names <- trimws(unlist(strsplit(input$sampleNames, "[,\\n]")))
-    custom_names <- custom_names[custom_names != ""]
+    if (isTRUE(suppress_sample_names_sync())) {
+      suppress_sample_names_sync(FALSE)
+      return()
+    }
+
+    custom_names <- parse_sample_names(input$sampleNames)
     new_count <- length(custom_names)
     if (new_count > 0 && new_count != isolate(input$nSamples)) {
+      suppress_sample_count_sync(TRUE)
       updateNumericInput(session, "nSamples", value = new_count)
     }
   }, ignoreInit = TRUE)
+
+  # --- Help Modals (Question Mark Icons) ---
+  observeEvent(input$help_nSamples, {
+    showModal(modalDialog(
+      title = "Number of Samples",
+      tags$p("Set how many samples you want to run through the same protocol."),
+      tags$ul(
+        tags$li("This value is kept in sync with the Custom Sample Names box."),
+        tags$li("If you edit the names list (comma- or newline-separated), the sample count will update automatically."),
+        tags$li("Tip: Keep sample names unique to avoid confusion in tables and plots.")
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+
+  observeEvent(input$help_nSteps, {
+    showModal(modalDialog(
+      title = "Number of Steps",
+      tags$p("Set how many hands-on steps are in your protocol."),
+      tags$ul(
+        tags$li("Each step has a name, hands-on duration, unit, and a display color."),
+        tags$li("The 'Time Between Steps' section defines the wait/incubation time between consecutive steps."),
+        tags$li("Changing the number of steps will add/remove step rows; existing values are preserved when possible.")
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+
+  observeEvent(input$help_granularity, {
+    showModal(modalDialog(
+      title = "Optimizer Granularity",
+      tags$p("Controls how finely the automatic optimizer searches for a non-conflicting staggering interval."),
+      tags$ul(
+        tags$li(tags$strong("Smaller granularity"), " (e.g., 1–15 sec) = more precise interval, but slower."),
+        tags$li(tags$strong("Larger granularity"), " (e.g., 1–5 min) = faster, but may slightly overestimate the best interval."),
+        tags$li("If optimization is slow, increase granularity; if schedules feel overly conservative, decrease it.")
+      ),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
   
   # Keeps the labels for "time between steps" updated with the current step names.
   observe({
@@ -998,8 +1091,24 @@ server <- function(input, output, session) {
     step_durationM <- to_minutes(step_dur_val_in, step_dur_unit_in)
     ttnM <- to_minutes(ttn_val_in, ttn_unit_in)
     
-    custom_sample_names <- trimws(unlist(strsplit(input$sampleNames, "[,\\n]")))
-    custom_sample_names <- custom_sample_names[custom_sample_names != ""]
+    custom_sample_names <- parse_sample_names(input$sampleNames)
+
+    if (length(custom_sample_names) != as.integer(input$nSamples)) {
+      showNotification(
+        paste0(
+          "Number of sample names (", length(custom_sample_names), ") does not match nSamples (", as.integer(input$nSamples), "). ",
+          "Please provide exactly one sample name per sample (recommended: one per line)."
+        ),
+        type = "error",
+        duration = 10
+      )
+      return(NULL)
+    }
+
+    if (anyDuplicated(custom_sample_names)) {
+      showNotification("Duplicate sample names detected; auto-disambiguating (e.g., adding .1, .2).", type = "warning", duration = 8)
+      custom_sample_names <- make.unique(custom_sample_names)
+    }
     buffer_min <- to_minutes(input$taskSwitchValue, input$taskSwitchUnit)
     
     # Determine the staggering interval, either automatically or from manual input.
@@ -1099,7 +1208,7 @@ server <- function(input, output, session) {
     df %>% select(Status, Sample, Step, Time, Duration, Wait_Until_Next, TimeNumeric, DurationNumeric)
   })
   
-  # Reactive that prepares the data frame for the "Schedule by Sample" table.
+ 
   schedule_sample_df <- reactive({
     res <- results(); if (is.null(res)) return(NULL)
     df <- res$schedule_by_sample
@@ -1107,11 +1216,10 @@ server <- function(input, output, session) {
     else                  df %>% mutate(across(everything(), ~sprintf("%02d:%02d", floor(.x), floor((.x %% 1) * 60))))
   })
   
-  # Reactive that calculates the base hue for generating sample colors.
   base_hue_reactive <- reactive({
     hex <- toupper(trimws(input$sampleColorBase))
     if (!startsWith(hex, "#")) hex <- paste0("#", hex)
-    if (!grepl("^#([A-F09]{6}|[A-F09]{8})$", hex)) return(210)
+    if (!grepl("^#([A-F0-9]{6}|[A-F0-9]{8})$", hex)) return(210)
     if (nchar(hex) == 9) hex <- substr(hex, 1, 7)
     suppressWarnings({
       hue <- try({ as.numeric(colorspace::coords(methods::as(colorspace::hex2RGB(hex), "polarLUV"))[1, "H"])
@@ -1478,6 +1586,21 @@ server <- function(input, output, session) {
       write(jsonlite::toJSON(full_session, pretty = TRUE, auto_unbox = TRUE), file)
     }
   )
+
+  # Download a minimal example session file to demonstrate the expected JSON format.
+  output$downloadSampleSession <- downloadHandler(
+    filename = function() {
+      paste0("StaggR_sample_session_", Sys.Date(), ".json")
+    },
+    content = function(file) {
+      example_path <- file.path("data", "RNA_labeling_params.json")
+      if (!file.exists(example_path)) {
+        stop("Example session file not found: ", example_path)
+      }
+      file.copy(example_path, file, overwrite = TRUE)
+    },
+    contentType = "application/json"
+  )
   
   # Handler to Save ONLY the Protocol Steps to a .csv file
   output$saveProtocol <- downloadHandler(
@@ -1522,10 +1645,22 @@ server <- function(input, output, session) {
     
     protocol_df <- as.data.frame(params$protocol_steps)
     accessory <- params$accessory_params
+
+    # Normalize and sync sample names/count from loaded session.
+    loaded_names <- parse_sample_names(accessory$sampleNames %||% "")
+    if (length(loaded_names) == 0) {
+      loaded_names <- paste0("Sample ", seq_len(max(1L, as.integer(isolate(input$nSamples) %||% 1L))))
+    }
     
     # Update all UI inputs from the loaded data.
     updateTextInput(session, "chartName", value = accessory$chartName)
-    updateTextAreaInput(session, "sampleNames", value = accessory$sampleNames)
+
+    suppress_sample_names_sync(TRUE)
+    updateTextAreaInput(session, "sampleNames", value = format_sample_names(loaded_names, prefer_newlines = TRUE))
+
+    suppress_sample_count_sync(TRUE)
+    updateNumericInput(session, "nSamples", value = length(loaded_names))
+
     updateRadioButtons(session, "optMode", selected = accessory$optMode)
     updateNumericInput(session, "manualIntervalValue", value = accessory$manualIntervalValue)
     updateSelectInput(session, "manualIntervalUnit", selected = accessory$manualIntervalUnit)
